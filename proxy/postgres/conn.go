@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -44,8 +45,6 @@ type conn struct {
 
 func newConn(clientConn, upstreamConn net.Conn, events chan<- proxy.Event) *conn {
 	return &conn{
-		client:        pgproto.NewBackend(pgproto.NewChunkReader(clientConn), clientConn),
-		upstream:      pgproto.NewFrontend(pgproto.NewChunkReader(upstreamConn), upstreamConn),
 		clientConn:    clientConn,
 		upstreamConn:  upstreamConn,
 		events:        events,
@@ -92,54 +91,115 @@ func (c *conn) relay(ctx context.Context) error {
 	return err
 }
 
-// relayStartup copies the startup/auth phase, parsing only enough to detect ReadyForQuery.
+const (
+	sslRequestCode    = 80877103
+	gssEncRequestCode = 80877104
+
+	authTypeOk        = 0
+	authTypeSASLFinal = 12
+)
+
+// relayStartup handles the startup/auth phase using raw byte relay to avoid
+// re-encoding issues with SCRAM and other auth mechanisms. Protocol parsers
+// (Backend/Frontend) are created only after auth completes.
 func (c *conn) relayStartup() error {
-	// Loop to handle SSLRequest / GSSEncRequest before the real StartupMessage.
-	var startupMsg pgproto.FrontendMessage
+	// Handle SSLRequest / GSSEncRequest, then forward the real StartupMessage.
 	for {
-		msg, err := c.client.ReceiveStartupMessage()
+		raw, err := readStartupRaw(c.clientConn)
 		if err != nil {
-			return fmt.Errorf("postgres: receive startup: %w", err)
+			return fmt.Errorf("postgres: read startup: %w", err)
 		}
-		switch msg.(type) {
-		case *pgproto.SSLRequest:
-			// Decline SSL; client will retry with plain StartupMessage.
-			if _, err := c.clientConn.Write([]byte{'N'}); err != nil {
-				return fmt.Errorf("postgres: decline ssl: %w", err)
+
+		// SSLRequest and GSSEncRequest are 8-byte messages with a specific code.
+		if len(raw) == 8 {
+			code := binary.BigEndian.Uint32(raw[4:])
+			switch code {
+			case sslRequestCode:
+				if _, err := c.clientConn.Write([]byte{'N'}); err != nil {
+					return fmt.Errorf("postgres: decline ssl: %w", err)
+				}
+				continue
+			case gssEncRequestCode:
+				if _, err := c.clientConn.Write([]byte{'N'}); err != nil {
+					return fmt.Errorf("postgres: decline gss: %w", err)
+				}
+				continue
 			}
-			continue
-		case *pgproto.GSSEncRequest:
-			// Decline GSS encryption.
-			if _, err := c.clientConn.Write([]byte{'N'}); err != nil {
-				return fmt.Errorf("postgres: decline gss: %w", err)
-			}
-			continue
 		}
-		startupMsg = msg
+
+		if _, err := c.upstreamConn.Write(raw); err != nil {
+			return fmt.Errorf("postgres: send startup: %w", err)
+		}
 		break
 	}
 
-	if err := encodeAndWrite(c.upstreamConn, startupMsg); err != nil {
-		return fmt.Errorf("postgres: send startup: %w", err)
-	}
-
+	// Relay auth messages as raw bytes until ReadyForQuery.
 	for {
-		msg, err := c.upstream.Receive()
+		msg, err := readMessageRaw(c.upstreamConn)
 		if err != nil {
 			return fmt.Errorf("postgres: receive auth: %w", err)
 		}
 
-		if err := encodeAndWrite(c.clientConn, msg); err != nil {
+		if _, err := c.clientConn.Write(msg); err != nil {
 			return fmt.Errorf("postgres: send auth: %w", err)
 		}
 
-		switch msg.(type) {
-		case *pgproto.ReadyForQuery:
+		switch msg[0] {
+		case 'Z': // ReadyForQuery — auth complete.
+			c.client = pgproto.NewBackend(pgproto.NewChunkReader(c.clientConn), c.clientConn)
+			c.upstream = pgproto.NewFrontend(pgproto.NewChunkReader(c.upstreamConn), c.upstreamConn)
 			return nil
-		case *pgproto.ErrorResponse:
+		case 'E': // ErrorResponse
 			return errors.New("postgres: auth error from upstream")
+		case 'R': // Authentication message
+			if len(msg) >= 9 {
+				authType := binary.BigEndian.Uint32(msg[5:9])
+				// AuthenticationOk and AuthenticationSASLFinal require no client response.
+				if authType != authTypeOk && authType != authTypeSASLFinal {
+					resp, err := readMessageRaw(c.clientConn)
+					if err != nil {
+						return fmt.Errorf("postgres: receive auth response: %w", err)
+					}
+					if _, err := c.upstreamConn.Write(resp); err != nil {
+						return fmt.Errorf("postgres: send auth response: %w", err)
+					}
+				}
+			}
 		}
 	}
+}
+
+// readStartupRaw reads a startup-format message (no type byte): 4-byte length + payload.
+func readStartupRaw(r io.Reader) ([]byte, error) {
+	var hdr [4]byte
+	if _, err := io.ReadFull(r, hdr[:]); err != nil {
+		return nil, fmt.Errorf("postgres: read startup header: %w", err)
+	}
+	msgLen := binary.BigEndian.Uint32(hdr[:])
+	if msgLen < 4 {
+		return nil, errors.New("postgres: invalid startup message length")
+	}
+	buf := make([]byte, msgLen)
+	copy(buf, hdr[:])
+	if _, err := io.ReadFull(r, buf[4:]); err != nil {
+		return nil, fmt.Errorf("postgres: read startup payload: %w", err)
+	}
+	return buf, nil
+}
+
+// readMessageRaw reads a regular protocol message: 1-byte type + 4-byte length + payload.
+func readMessageRaw(r io.Reader) ([]byte, error) {
+	var hdr [5]byte
+	if _, err := io.ReadFull(r, hdr[:]); err != nil {
+		return nil, fmt.Errorf("postgres: read message header: %w", err)
+	}
+	msgLen := binary.BigEndian.Uint32(hdr[1:5])
+	buf := make([]byte, 1+msgLen)
+	copy(buf, hdr[:])
+	if _, err := io.ReadFull(r, buf[5:]); err != nil {
+		return nil, fmt.Errorf("postgres: read message payload: %w", err)
+	}
+	return buf, nil
 }
 
 // relayClientToUpstream reads messages from the client, captures info, and forwards to upstream.
