@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package tap.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+
+message QueryEvent {
+  string id = 1;
+  int32 op = 2;
+  string query = 3;
+  repeated string args = 4;
+  google.protobuf.Timestamp start_time = 5;
+  google.protobuf.Duration duration = 6;
+  int64 rows_affected = 7;
+  string error = 8;
+  string tx_id = 9;
+}
+
+message WatchRequest {}
+
+message WatchResponse {
+  QueryEvent event = 1;
+}
+
+message ExplainRequest {
+  string query = 1;
+  repeated string args = 2;
+  bool analyze = 3;
+}
+
+message ExplainResponse {
+  string plan = 1;
+}
+
+service TapService {
+  rpc Watch(WatchRequest) returns (stream WatchResponse);
+  rpc Explain(ExplainRequest) returns (ExplainResponse);
+}
