@@ -94,9 +94,29 @@ func (c *conn) relay(ctx context.Context) error {
 
 // relayStartup copies the startup/auth phase, parsing only enough to detect ReadyForQuery.
 func (c *conn) relayStartup() error {
-	startupMsg, err := c.client.ReceiveStartupMessage()
-	if err != nil {
-		return fmt.Errorf("postgres: receive startup: %w", err)
+	// Loop to handle SSLRequest / GSSEncRequest before the real StartupMessage.
+	var startupMsg pgproto.FrontendMessage
+	for {
+		msg, err := c.client.ReceiveStartupMessage()
+		if err != nil {
+			return fmt.Errorf("postgres: receive startup: %w", err)
+		}
+		switch msg.(type) {
+		case *pgproto.SSLRequest:
+			// Decline SSL; client will retry with plain StartupMessage.
+			if _, err := c.clientConn.Write([]byte{'N'}); err != nil {
+				return fmt.Errorf("postgres: decline ssl: %w", err)
+			}
+			continue
+		case *pgproto.GSSEncRequest:
+			// Decline GSS encryption.
+			if _, err := c.clientConn.Write([]byte{'N'}); err != nil {
+				return fmt.Errorf("postgres: decline gss: %w", err)
+			}
+			continue
+		}
+		startupMsg = msg
+		break
 	}
 
 	if err := encodeAndWrite(c.upstreamConn, startupMsg); err != nil {
