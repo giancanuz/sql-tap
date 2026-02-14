@@ -222,7 +222,7 @@ func (m Model) View() string {
 	case viewList:
 	}
 
-	listHeight := max(m.height-12, 3)
+	listHeight := m.listHeight()
 
 	var footer string
 	switch {
@@ -243,6 +243,10 @@ func (m Model) View() string {
 		m.renderPreview(),
 		footer,
 	}, "\n")
+}
+
+func (m Model) listHeight() int {
+	return max(m.height-12, 3)
 }
 
 func rebuildDisplayRows(
@@ -477,6 +481,18 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cursor--
 			m.follow = false
 		}
+		return m, nil
+	case "ctrl+d", "pgdown":
+		half := max(m.listHeight()/2, 1)
+		m.cursor = min(m.cursor+half, max(len(m.displayRows)-1, 0))
+		if len(m.displayRows) > 0 && m.cursor == len(m.displayRows)-1 {
+			m.follow = true
+		}
+		return m, nil
+	case "ctrl+u", "pgup":
+		half := max(m.listHeight()/2, 1)
+		m.cursor = max(m.cursor-half, 0)
+		m.follow = false
 		return m, nil
 	}
 	return m, nil
