@@ -1,5 +1,8 @@
 version: 2
 
+release:
+  mode: replace
+
 builds:
   - id: sql-tap
     main: .
