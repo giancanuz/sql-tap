@@ -249,7 +249,7 @@ func (m Model) View() string {
 		footer = fmt.Sprintf("  / %s█", m.searchQuery)
 	default:
 		footer = "  q: quit  j/k: navigate  space: toggle tx  enter: inspect  a: analytics" +
-			"  c: copy query  C: copy with args  x/X: explain/analyze  e/E: edit+explain" +
+			"  c/C: copy/with args  x/X: explain/analyze  e/E: edit+explain" +
 			"  /: search  s: sort"
 		if m.searchQuery != "" {
 			footer += "  esc: clear filter"
