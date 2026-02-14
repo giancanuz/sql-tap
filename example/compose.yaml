@@ -1,4 +1,21 @@
 services:
+  mysql:
+    image: mysql:8
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: mysql
+      MYSQL_DATABASE: db
+      MYSQL_USER: mysql
+      MYSQL_PASSWORD: mysql
+    volumes:
+      - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-umysql", "-pmysql" ]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+
   postgres:
     image: postgres:18
     ports:
@@ -8,14 +25,14 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: db
     volumes:
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 2s
       timeout: 5s
       retries: 5
 
-  tapd:
+  tapd-postgres:
     build:
       context: ..
       dockerfile: Dockerfile
@@ -30,4 +47,22 @@ services:
       - --grpc=:9091
     depends_on:
       postgres:
+        condition: service_healthy
+
+  tapd-mysql:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    ports:
+      - "3307:3307"
+      - "9092:9092"
+    environment:
+      DATABASE_URL: "mysql:mysql@tcp(mysql:3306)/db"
+    command:
+      - --driver=mysql
+      - --listen=:3307
+      - --upstream=mysql:3306
+      - --grpc=:9092
+    depends_on:
+      mysql:
         condition: service_healthy
