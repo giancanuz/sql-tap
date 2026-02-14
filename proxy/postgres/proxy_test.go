@@ -13,7 +13,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/mickamy/sql-tap/proxy"
-	proxypostgres "github.com/mickamy/sql-tap/proxy/postgres"
+	pproxy "github.com/mickamy/sql-tap/proxy/postgres"
 )
 
 const (
@@ -58,7 +58,7 @@ func startPostgres(t *testing.T) string {
 	return "127.0.0.1:" + port.Port()
 }
 
-func startProxy(t *testing.T, upstream string) (*proxypostgres.Proxy, string) {
+func startProxy(t *testing.T, upstream string) (*pproxy.Proxy, string) {
 	t.Helper()
 
 	var lc net.ListenConfig
@@ -69,7 +69,7 @@ func startProxy(t *testing.T, upstream string) (*proxypostgres.Proxy, string) {
 	addr := lis.Addr().String()
 	_ = lis.Close()
 
-	p := proxypostgres.New(addr, upstream)
+	p := pproxy.New(addr, upstream)
 	ctx, cancel := context.WithCancel(t.Context())
 
 	go func() {

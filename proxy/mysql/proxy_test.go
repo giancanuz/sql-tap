@@ -12,7 +12,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/modules/mysql"
 
 	"github.com/mickamy/sql-tap/proxy"
-	proxymysql "github.com/mickamy/sql-tap/proxy/mysql"
+	mproxy "github.com/mickamy/sql-tap/proxy/mysql"
 )
 
 const (
@@ -51,7 +51,7 @@ func startMySQL(t *testing.T) string {
 	return fmt.Sprintf("%s:%s", host, port.Port())
 }
 
-func startProxy(t *testing.T, upstream string) (*proxymysql.Proxy, string) {
+func startProxy(t *testing.T, upstream string) (*mproxy.Proxy, string) {
 	t.Helper()
 
 	// Find an available port.
@@ -63,7 +63,7 @@ func startProxy(t *testing.T, upstream string) (*proxymysql.Proxy, string) {
 	addr := lis.Addr().String()
 	_ = lis.Close()
 
-	p := proxymysql.New(addr, upstream)
+	p := mproxy.New(addr, upstream)
 	ctx, cancel := context.WithCancel(t.Context())
 
 	go func() {
