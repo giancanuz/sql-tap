@@ -126,8 +126,10 @@ Flags:
 |-----------|--------------------------------------|
 | `j` / `↓` | Move down                            |
 | `k` / `↑` | Move up                              |
+| `/`       | Incremental search                   |
 | `Enter`   | Inspect query / transaction          |
 | `Space`   | Toggle transaction expand / collapse |
+| `Esc`     | Clear search filter                  |
 | `x`       | EXPLAIN                              |
 | `X`       | EXPLAIN ANALYZE                      |
 | `e`       | Edit query, then EXPLAIN             |
