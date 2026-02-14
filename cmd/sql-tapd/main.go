@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -17,6 +16,7 @@ import (
 	"github.com/mickamy/sql-tap/dsn"
 	"github.com/mickamy/sql-tap/explain"
 	"github.com/mickamy/sql-tap/proxy"
+	"github.com/mickamy/sql-tap/proxy/mysql"
 	"github.com/mickamy/sql-tap/proxy/postgres"
 	"github.com/mickamy/sql-tap/server"
 )
@@ -31,7 +31,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "\nEnvironment:\n  DATABASE_URL    DSN for EXPLAIN queries (read by default via -dsn-env)\n")
 	}
 
-	driver := fs.String("driver", "postgres", "database driver: postgres")
+	driver := fs.String("driver", "postgres", "database driver: postgres, mysql")
 	listen := fs.String("listen", ":5433", "client listen address")
 	upstream := fs.String("upstream", "localhost:5432", "upstream database address")
 	grpcAddr := fs.String("grpc", ":9091", "gRPC server address for TUI")
@@ -91,7 +91,7 @@ func run(driver, listen, upstream, grpcAddr, dsnEnv string) error {
 	case "postgres":
 		p = postgres.New(listen, upstream)
 	case "mysql":
-		return errors.New("mysql driver is not yet supported (coming soon)")
+		p = mysql.New(listen, upstream)
 	default:
 		return fmt.Errorf("unsupported driver: %s", driver)
 	}
