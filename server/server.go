@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
+	"unicode/utf8"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -102,15 +104,39 @@ func (s *tapService) Explain(ctx context.Context, req *tapv1.ExplainRequest) (*t
 }
 
 func eventToProto(ev proxy.Event) *tapv1.QueryEvent {
+	args := make([]string, len(ev.Args))
+	for i, a := range ev.Args {
+		args[i] = sanitizeUTF8(a)
+	}
 	return &tapv1.QueryEvent{
 		Id:           ev.ID,
 		Op:           int32(ev.Op),
-		Query:        ev.Query,
-		Args:         ev.Args,
+		Query:        sanitizeUTF8(ev.Query),
+		Args:         args,
 		StartTime:    timestamppb.New(ev.StartTime),
 		Duration:     durationpb.New(ev.Duration),
 		RowsAffected: ev.RowsAffected,
-		Error:        ev.Error,
+		Error:        sanitizeUTF8(ev.Error),
 		TxId:         ev.TxID,
 	}
+}
+
+// sanitizeUTF8 replaces invalid UTF-8 bytes with the Unicode replacement character.
+func sanitizeUTF8(s string) string {
+	if utf8.ValidString(s) {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if r == utf8.RuneError && size <= 1 {
+			b.WriteRune('\uFFFD')
+			i++
+		} else {
+			b.WriteRune(r)
+			i += size
+		}
+	}
+	return b.String()
 }
