@@ -209,7 +209,7 @@ func clearCapabilityBits(pkt []byte, bits uint32) {
 		return
 	}
 	lower := binary.LittleEndian.Uint16(payload[lowerOff : lowerOff+2])
-	lower &^= uint16(bits & 0xFFFF) //nolint:gosec // masking to 16 bits, won't overflow
+	lower &^= uint16(bits & 0xFFFF)
 	binary.LittleEndian.PutUint16(payload[lowerOff:lowerOff+2], lower)
 
 	upperOff := base + 18
@@ -217,7 +217,7 @@ func clearCapabilityBits(pkt []byte, bits uint32) {
 		return
 	}
 	upper := binary.LittleEndian.Uint16(payload[upperOff : upperOff+2])
-	upper &^= uint16(bits >> 16) //nolint:gosec // shifted to 16 bits, won't overflow
+	upper &^= uint16(bits >> 16)
 	binary.LittleEndian.PutUint16(payload[upperOff:upperOff+2], upper)
 }
 
@@ -662,7 +662,7 @@ func readBinaryValue(data []byte, off int, typ byte) (string, int) {
 		if off+1 > len(data) {
 			return "?", 0
 		}
-		return strconv.Itoa(int(int8(data[off]))), 1
+		return strconv.Itoa(int(int8(data[off]))), 1 //nolint:gosec // intentional byte-to-int8 cast for signed interpretation
 
 	case mysqlTypeShort, mysqlTypeYear:
 		if off+2 > len(data) {

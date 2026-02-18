@@ -14,7 +14,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-const dsn = "postgres://postgres:postgres@localhost:5433/db?sslmode=disable"
+const dsn = "postgres://postgres:postgres@localhost:5433/db?sslmode=disable" //nolint:gosec // example credentials
 
 const upsertUser = "INSERT INTO users (name, email) VALUES ($1, $2)" +
 	" ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name"
