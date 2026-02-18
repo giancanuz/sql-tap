@@ -15,8 +15,8 @@ func TestDetectDriver(t *testing.T) {
 		want    string
 		wantErr bool
 	}{
-		{name: "postgres URI", raw: "postgres://user:pass@localhost/db", want: "pgx"},
-		{name: "postgresql URI", raw: "postgresql://user:pass@localhost/db", want: "pgx"},
+		{name: "postgres URI", raw: "postgres://user:pass@localhost/db", want: "pgx"},     //nolint:gosec // test data
+		{name: "postgresql URI", raw: "postgresql://user:pass@localhost/db", want: "pgx"}, //nolint:gosec // test data
 		{name: "postgres key=value", raw: "host=localhost dbname=db", want: "pgx"},
 		{name: "mysql", raw: "user:pass@tcp(localhost:3306)/db", want: "mysql"},
 		{name: "empty", raw: "", wantErr: true},
