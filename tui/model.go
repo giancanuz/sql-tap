@@ -188,7 +188,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if msg.query == "" {
-			return m, nil // cancelled
+			return m, nil // canceled
 		}
 		m.view = viewExplain
 		m.explainPlan = ""
