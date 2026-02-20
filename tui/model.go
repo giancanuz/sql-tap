@@ -75,6 +75,10 @@ type Model struct {
 	filterCursor int
 	sortMode     sortMode
 
+	writeMode    bool
+	wroteMessage string
+	alertSeq     int
+
 	inspectScroll  int
 	explainPlan    string
 	explainErr     error
@@ -100,6 +104,15 @@ type explainResultMsg struct {
 	plan string
 	err  error
 }
+
+type exportResultMsg struct {
+	path string
+	err  error
+}
+
+type clearAlertMsg struct{ seq int }
+
+const alertDuration = 3 * time.Second
 
 // connectedMsg is sent after successfully establishing the gRPC Watch stream.
 type connectedMsg struct {
@@ -200,7 +213,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.explainArgs = msg.args
 		return m, runExplain(m.client, msg.mode, msg.query, msg.args)
 
+	case exportResultMsg:
+		m.alertSeq++
+		if msg.err != nil {
+			m.wroteMessage = "write error: " + msg.err.Error()
+		} else {
+			m.wroteMessage = "wrote: ./" + msg.path
+		}
+		seq := m.alertSeq
+		return m, tea.Tick(alertDuration, func(time.Time) tea.Msg {
+			return clearAlertMsg{seq: seq}
+		})
+
+	case clearAlertMsg:
+		if msg.seq == m.alertSeq {
+			m.wroteMessage = ""
+		}
+		return m, nil
+
 	case tea.KeyMsg:
+		m.wroteMessage = ""
 		switch m.view {
 		case viewInspect:
 			return m.updateInspect(msg)
@@ -250,12 +282,15 @@ func (m Model) View() string {
 		footer = "  / " + renderInputWithCursor(m.searchQuery, m.searchCursor)
 	case m.filterMode:
 		footer = "  filter: " + renderInputWithCursor(m.filterQuery, m.filterCursor)
+	case m.writeMode:
+		footer = "  write: [j]son [m]arkdown"
 	default:
 		items := []string{
 			"q: quit", "j/k: navigate", "space: toggle tx",
 			"enter: inspect", "a: analytics",
 			"c/C: copy", "x/X: explain",
 			"e/E: edit+explain", "/: search", "f: filter", "s: sort",
+			"w: write",
 		}
 		footer = wrapFooterItems(items, m.width)
 		if m.filterQuery != "" {
@@ -272,11 +307,17 @@ func (m Model) View() string {
 	footerLines := strings.Count(footer, "\n") + 1
 	listHeight := m.listHeight(footerLines)
 
-	return strings.Join([]string{
+	view := strings.Join([]string{
 		m.renderList(listHeight),
 		m.renderPreview(),
 		footer,
 	}, "\n")
+
+	if m.wroteMessage != "" {
+		view = overlayAlert(view, m.wroteMessage, m.width)
+	}
+
+	return view
 }
 
 func (m Model) listHeight(footerLines int) int {
@@ -467,6 +508,9 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.filterMode {
 		return m.updateFilter(msg)
 	}
+	if m.writeMode {
+		return m.updateWrite(msg)
+	}
 
 	switch msg.String() {
 	case "q", "ctrl+c":
@@ -495,6 +539,9 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.filterMode = true
 		m.filterQuery = ""
 		m.filterCursor = 0
+		return m, nil
+	case "w":
+		m.writeMode = true
 		return m, nil
 	case "s":
 		return m.toggleSort(), nil
@@ -620,6 +667,30 @@ func (m Model) updateFilter(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	m.displayRows, m.txColorMap = m.rebuildDisplayRows()
 	m.cursor = min(m.cursor, max(len(m.displayRows)-1, 0))
 	return m, nil
+}
+
+func (m Model) updateWrite(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	m.writeMode = false
+	switch msg.String() {
+	case "j":
+		return m, m.runExport(exportJSON)
+	case "m":
+		return m, m.runExport(exportMarkdown)
+	}
+	return m, nil
+}
+
+func (m Model) runExport(format exportFormat) tea.Cmd {
+	events := make([]*tapv1.QueryEvent, len(m.events))
+	copy(events, m.events)
+	filterQuery := m.filterQuery
+	searchQuery := m.searchQuery
+	return func() tea.Msg {
+		path, err := writeExport(
+			events, filterQuery, searchQuery, format, "",
+		)
+		return exportResultMsg{path: path, err: err}
+	}
 }
 
 func (m Model) toggleTx() Model {
