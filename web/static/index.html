@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sql-tap</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>sql-tap</h1>
+    <span class="stats" id="stats">0 queries</span>
+    <input type="text" id="filter" placeholder="Filter queries...">
+    <span class="status disconnected" id="status">connecting...</span>
+  </header>
+  <div id="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th class="col-time">Time</th>
+          <th class="col-op">Op</th>
+          <th class="col-query">Query</th>
+          <th class="col-dur">Duration</th>
+          <th class="col-err">Error</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+  <div id="detail">
+    <div id="detail-content">
+      <div class="detail-row"><span class="detail-label">Op:</span><span class="detail-value" id="d-op"></span></div>
+      <div class="detail-row"><span class="detail-label">Time:</span><span class="detail-value" id="d-time"></span></div>
+      <div class="detail-row"><span class="detail-label">Duration:</span><span class="detail-value" id="d-dur"></span></div>
+      <div class="detail-row" id="d-rows-row"><span class="detail-label">Rows:</span><span class="detail-value" id="d-rows"></span></div>
+      <div class="detail-row" id="d-tx-row"><span class="detail-label">Tx:</span><span class="detail-value" id="d-tx"></span></div>
+      <div class="detail-row" id="d-err-row"><span class="detail-label">Error:</span><span class="detail-value" id="d-err" style="color:#f44747"></span></div>
+      <div class="detail-row"><span class="detail-label">Query:</span></div>
+      <div class="detail-query" id="d-query"></div>
+      <div class="detail-args" id="d-args"></div>
+      <div class="detail-buttons">
+        <button class="btn" id="btn-explain" onclick="runExplain(false)">EXPLAIN</button>
+        <button class="btn" id="btn-analyze" onclick="runExplain(true)">EXPLAIN ANALYZE</button>
+        <button class="btn" onclick="copyQuery(false)">Copy Query</button>
+        <button class="btn" onclick="copyQuery(true)">Copy with Args</button>
+      </div>
+      <div id="explain-output">
+        <pre id="explain-pre"></pre>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>
