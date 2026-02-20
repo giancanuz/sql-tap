@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -20,6 +21,7 @@ import (
 	"github.com/mickamy/sql-tap/proxy/mysql"
 	"github.com/mickamy/sql-tap/proxy/postgres"
 	"github.com/mickamy/sql-tap/server"
+	"github.com/mickamy/sql-tap/web"
 )
 
 var version = "dev"
@@ -37,6 +39,7 @@ func main() {
 	upstream := fs.String("upstream", "", "upstream database address (required)")
 	grpcAddr := fs.String("grpc", ":9091", "gRPC server address for TUI")
 	dsnEnv := fs.String("dsn-env", "DATABASE_URL", "environment variable holding DSN for EXPLAIN")
+	httpAddr := fs.String("http", "", "HTTP server address for web UI (e.g. :8080)")
 	showVersion := fs.Bool("version", false, "show version and exit")
 
 	_ = fs.Parse(os.Args[1:])
@@ -51,12 +54,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := run(*driver, *listen, *upstream, *grpcAddr, *dsnEnv); err != nil {
+	if err := run(*driver, *listen, *upstream, *grpcAddr, *dsnEnv, *httpAddr); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func run(driver, listen, upstream, grpcAddr, dsnEnv string) error {
+func run(driver, listen, upstream, grpcAddr, dsnEnv, httpAddr string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
@@ -99,6 +102,26 @@ func run(driver, listen, upstream, grpcAddr, dsnEnv string) error {
 			log.Printf("grpc serve: %v", err)
 		}
 	}()
+
+	// HTTP server (optional)
+	if httpAddr != "" {
+		httpLis, err := lc.Listen(ctx, "tcp", httpAddr)
+		if err != nil {
+			return fmt.Errorf("listen http %s: %w", httpAddr, err)
+		}
+		webSrv := web.New(b, explainClient)
+		go func() {
+			log.Printf("HTTP server listening on %s", httpAddr)
+			if err := webSrv.Serve(httpLis); err != nil {
+				log.Printf("http serve: %v", err)
+			}
+		}()
+		defer func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = webSrv.Shutdown(shutdownCtx)
+		}()
+	}
 
 	// Proxy
 	var p proxy.Proxy

@@ -56,6 +56,7 @@ services:
     ports:
       - "5433:5433"
       - "9091:9091"
+      - "8080:8080"
     environment:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/db?sslmode=disable
     command:
@@ -63,6 +64,7 @@ services:
       - --listen=:5433
       - --upstream=postgres:5432
       - --grpc=:9091
+      - --http=:8080
     depends_on:
       postgres:
         condition: service_healthy
@@ -74,6 +76,7 @@ services:
     ports:
       - "3307:3307"
       - "9092:9092"
+      - "8081:8081"
     environment:
       DATABASE_URL: "mysql:mysql@tcp(mysql:3306)/db"
     command:
@@ -81,6 +84,7 @@ services:
       - --listen=:3307
       - --upstream=mysql:3306
       - --grpc=:9092
+      - --http=:8081
     depends_on:
       mysql:
         condition: service_healthy
@@ -92,6 +96,7 @@ services:
     ports:
       - "3309:3309"
       - "9093:9093"
+      - "8082:8082"
     environment:
       DATABASE_URL: "mysql:mysql@tcp(mysql9:3306)/db"
     command:
@@ -99,6 +104,7 @@ services:
       - --listen=:3309
       - --upstream=mysql9:3306
       - --grpc=:9093
+      - --http=:8082
     depends_on:
       mysql9:
         condition: service_healthy
@@ -129,6 +135,7 @@ services:
     ports:
       - "4001:4001"
       - "9094:9094"
+      - "8083:8083"
     environment:
       DATABASE_URL: "root@tcp(tidb:4000)/db"
     command:
@@ -136,6 +143,7 @@ services:
       - --listen=:4001
       - --upstream=tidb:4000
       - --grpc=:9094
+      - --http=:8083
     depends_on:
       tidb-init:
         condition: service_completed_successfully
