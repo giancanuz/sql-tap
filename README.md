@@ -2,13 +2,14 @@
 
 [![Sponsor](https://img.shields.io/badge/Sponsor-❤-ea4aaa?style=flat-square&logo=github)](https://github.com/sponsors/mickamy)
 
-Real-time SQL traffic viewer — proxy daemon + TUI client.
+Real-time SQL traffic viewer — proxy daemon + TUI / Web client.
 
 sql-tap sits between your application and your database (PostgreSQL, MySQL, or TiDB), capturing every query and
 displaying it in an interactive terminal UI. Inspect queries, view transactions, and run EXPLAIN — all without changing
 your application code.
 
-![demo](./docs/demo.gif)
+![tui](./docs/tui.gif)
+![web](./docs/web.png)
 
 ## Installation
 
@@ -103,12 +104,30 @@ Flags:
   -listen    client listen address (required)
   -upstream  upstream database address (required)
   -grpc      gRPC server address for TUI (default: ":9091")
+  -http      HTTP server address for web UI (e.g. ":8080")
   -dsn-env   env var holding DSN for EXPLAIN (default: "DATABASE_URL")
   -version   show version and exit
 ```
 
 Set `DATABASE_URL` (or the env var specified by `-dsn-env`) to enable EXPLAIN support. Without it, the proxy still
 captures queries but EXPLAIN is disabled.
+
+### Web UI
+
+Add `--http=:8080` to serve a browser-based viewer:
+
+```bash
+DATABASE_URL="postgres://user:pass@localhost:5432/db?sslmode=disable" \
+  sql-tapd --driver=postgres --listen=:5433 --upstream=localhost:5432 --http=:8080
+```
+
+Open `http://localhost:8080` in your browser to view queries in real-time. The web UI supports:
+
+- Real-time query stream via SSE
+- Click to inspect query details
+- EXPLAIN / EXPLAIN ANALYZE
+- Text filter
+- Copy query (with or without bound args)
 
 ### sql-tap
 
@@ -229,9 +248,10 @@ sql-tap includes a workaround that detects and discards these split sequences. A
                      │  captures queries     │
                      │  via wire protocol    │
                      └───────────┬───────────┘
-                                 │ gRPC stream
+                                 │ gRPC stream / SSE
                      ┌───────────▼───────────┐
                      │  sql-tap (TUI)        │
+                     │  Browser  (Web UI)    │
                      └───────────────────────┘
 ```
 
