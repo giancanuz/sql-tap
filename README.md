@@ -128,26 +128,27 @@ Flags:
 
 ### List view
 
-| Key               | Action                               |
-|-------------------|--------------------------------------|
-| `j` / `↓`         | Move down                            |
-| `k` / `↑`         | Move up                              |
-| `Ctrl+d` / `PgDn` | Half-page down                       |
-| `Ctrl+u` / `PgUp` | Half-page up                         |
-| `/`               | Incremental text search              |
-| `f`               | Structured filter (see below)        |
-| `s`               | Toggle sort (chronological/duration) |
-| `Enter`           | Inspect query / transaction          |
-| `Space`           | Toggle transaction expand / collapse |
-| `Esc`             | Clear search / filter                |
-| `x`               | EXPLAIN                              |
-| `X`               | EXPLAIN ANALYZE                      |
-| `e`               | Edit query, then EXPLAIN             |
-| `E`               | Edit query, then EXPLAIN ANALYZE     |
-| `a`               | Analytics view                       |
-| `c`               | Copy query                           |
-| `C`               | Copy query with bound args           |
-| `q`               | Quit                                 |
+| Key               | Action                                 |
+|-------------------|----------------------------------------|
+| `j` / `↓`         | Move down                              |
+| `k` / `↑`         | Move up                                |
+| `Ctrl+d` / `PgDn` | Half-page down                         |
+| `Ctrl+u` / `PgUp` | Half-page up                           |
+| `/`               | Incremental text search                |
+| `f`               | Structured filter (see below)          |
+| `s`               | Toggle sort (chronological/duration)   |
+| `Enter`           | Inspect query / transaction            |
+| `Space`           | Toggle transaction expand / collapse   |
+| `Esc`             | Clear search / filter                  |
+| `x`               | EXPLAIN                                |
+| `X`               | EXPLAIN ANALYZE                        |
+| `e`               | Edit query, then EXPLAIN               |
+| `E`               | Edit query, then EXPLAIN ANALYZE       |
+| `a`               | Analytics view                         |
+| `c`               | Copy query                             |
+| `C`               | Copy query with bound args             |
+| `w`               | Export queries to file (JSON/Markdown) |
+| `q`               | Quit                                   |
 
 ### Inspector view
 
