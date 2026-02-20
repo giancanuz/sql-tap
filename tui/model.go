@@ -75,9 +75,10 @@ type Model struct {
 	filterCursor int
 	sortMode     sortMode
 
-	writeMode    bool
-	wroteMessage string
-	alertSeq     int
+	writeMode      bool
+	wroteMessage   string
+	alertSeq       int
+	pendingBracket bool
 
 	inspectScroll  int
 	explainPlan    string
@@ -175,7 +176,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.view != viewList {
 			return m, recvEvent(m.stream)
 		}
-		m.displayRows, m.txColorMap = m.rebuildDisplayRows()
+		m = m.rebuild()
 		if m.follow {
 			m.cursor = max(len(m.displayRows)-1, 0)
 		}
@@ -321,6 +322,12 @@ func (m Model) listHeight(footerLines int) int {
 	// Adjust by extra footer lines beyond the default 1.
 	extra := max(footerLines-1, 0)
 	return max(m.height-12-extra, 3)
+}
+
+// rebuild wraps rebuildDisplayRows for convenience.
+func (m Model) rebuild() Model {
+	m.displayRows, m.txColorMap = m.rebuildDisplayRows()
+	return m
 }
 
 func (m Model) rebuildDisplayRows() ([]displayRow, map[string]lipgloss.Color) {
@@ -563,11 +570,15 @@ func (m Model) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "enter":
 		m.searchMode = false
+		m.pendingBracket = false
+		m = m.rebuild()
+		m.cursor = min(m.cursor, max(len(m.displayRows)-1, 0))
 		return m, nil
 	case "esc":
 		m.searchMode = false
 		m.searchQuery = ""
-		m.displayRows, m.txColorMap = m.rebuildDisplayRows()
+		m.pendingBracket = false
+		m = m.rebuild()
 		m.cursor = min(m.cursor, max(len(m.displayRows)-1, 0))
 		return m, nil
 	case "backspace":
@@ -575,7 +586,7 @@ func (m Model) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			runes := []rune(m.searchQuery)
 			m.searchQuery = string(runes[:m.searchCursor-1]) + string(runes[m.searchCursor:])
 			m.searchCursor--
-			m.displayRows, m.txColorMap = m.rebuildDisplayRows()
+			m = m.rebuild()
 			m.cursor = min(m.cursor, max(len(m.displayRows)-1, 0))
 		}
 		return m, nil
@@ -598,8 +609,12 @@ func (m Model) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.navigateCursor(msg.String()), nil
 	}
 
-	// Ignore non-printable keys.
-	r := msg.Runes
+	if len(msg.Runes) == 0 {
+		return m, nil
+	}
+
+	var r []rune
+	m, r = m.filterInputRunes(msg.Runes)
 	if len(r) == 0 {
 		return m, nil
 	}
@@ -607,7 +622,7 @@ func (m Model) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	runes := []rune(m.searchQuery)
 	m.searchQuery = string(runes[:m.searchCursor]) + string(r) + string(runes[m.searchCursor:])
 	m.searchCursor += len(r)
-	m.displayRows, m.txColorMap = m.rebuildDisplayRows()
+	m = m.rebuild()
 	m.cursor = min(m.cursor, max(len(m.displayRows)-1, 0))
 	return m, nil
 }
@@ -616,11 +631,15 @@ func (m Model) updateFilter(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "enter":
 		m.filterMode = false
+		m.pendingBracket = false
+		m = m.rebuild()
+		m.cursor = min(m.cursor, max(len(m.displayRows)-1, 0))
 		return m, nil
 	case "esc":
 		m.filterMode = false
 		m.filterQuery = ""
-		m.displayRows, m.txColorMap = m.rebuildDisplayRows()
+		m.pendingBracket = false
+		m = m.rebuild()
 		m.cursor = min(m.cursor, max(len(m.displayRows)-1, 0))
 		return m, nil
 	case "backspace":
@@ -628,7 +647,7 @@ func (m Model) updateFilter(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			runes := []rune(m.filterQuery)
 			m.filterQuery = string(runes[:m.filterCursor-1]) + string(runes[m.filterCursor:])
 			m.filterCursor--
-			m.displayRows, m.txColorMap = m.rebuildDisplayRows()
+			m = m.rebuild()
 			m.cursor = min(m.cursor, max(len(m.displayRows)-1, 0))
 		}
 		return m, nil
@@ -651,8 +670,12 @@ func (m Model) updateFilter(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.navigateCursor(msg.String()), nil
 	}
 
-	// Ignore non-printable keys.
-	r := msg.Runes
+	if len(msg.Runes) == 0 {
+		return m, nil
+	}
+
+	var r []rune
+	m, r = m.filterInputRunes(msg.Runes)
 	if len(r) == 0 {
 		return m, nil
 	}
@@ -660,7 +683,7 @@ func (m Model) updateFilter(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	runes := []rune(m.filterQuery)
 	m.filterQuery = string(runes[:m.filterCursor]) + string(r) + string(runes[m.filterCursor:])
 	m.filterCursor += len(r)
-	m.displayRows, m.txColorMap = m.rebuildDisplayRows()
+	m = m.rebuild()
 	m.cursor = min(m.cursor, max(len(m.displayRows)-1, 0))
 	return m, nil
 }
@@ -695,7 +718,7 @@ func (m Model) toggleTx() Model {
 		return m
 	}
 	m.collapsed[txID] = !m.collapsed[txID]
-	m.displayRows, m.txColorMap = m.rebuildDisplayRows()
+	m = m.rebuild()
 	for i, r := range m.displayRows {
 		if r.kind == rowTxSummary && r.txID == txID {
 			m.cursor = i
@@ -738,6 +761,41 @@ func (m Model) navigateCursor(key string) Model {
 	return m
 }
 
+// filterInputRunes works around a bubbletea v1 limitation where arrow-key
+// escape sequences (ESC [ A/B/C/D/F/H) can be split across read() calls.
+// When that happens, ESC is consumed as KeyEscape and the remaining bytes
+// arrive as rune input ("[D", etc.). This filter buffers a standalone "["
+// and discards it together with a following CSI final byte, preventing
+// garbage characters from being inserted into search/filter text.
+//
+// Limitation: the literal two-character sequence "[A", "[B", "[C", "[D",
+// "[F", or "[H" cannot be typed in search/filter input.
+func (m Model) filterInputRunes(r []rune) (Model, []rune) {
+	// "[D" arrived as a single batch of runes.
+	if len(r) >= 2 && r[0] == '[' {
+		m.pendingBracket = false
+		return m, nil
+	}
+	// Previous event was a standalone "["; check if this is a CSI final byte.
+	if m.pendingBracket {
+		m.pendingBracket = false
+		if len(r) == 1 {
+			switch r[0] {
+			case 'A', 'B', 'C', 'D', 'F', 'H':
+				return m, nil
+			}
+		}
+		// Not a CSI byte — emit the buffered "[" plus current runes.
+		return m, append([]rune{'['}, r...)
+	}
+	// Buffer a standalone "[" to check the next event.
+	if len(r) == 1 && r[0] == '[' {
+		m.pendingBracket = true
+		return m, nil
+	}
+	return m, r
+}
+
 func (m Model) copyQuery(withArgs bool) (Model, tea.Cmd) {
 	ev := m.cursorEvent()
 	if ev == nil || ev.GetQuery() == "" {
@@ -768,7 +826,7 @@ func (m Model) toggleSort() Model {
 	case sortDuration:
 		m.sortMode = sortChronological
 	}
-	m.displayRows, m.txColorMap = m.rebuildDisplayRows()
+	m = m.rebuild()
 	m.cursor = 0
 	return m
 }
@@ -793,7 +851,7 @@ func (m Model) clearFilter() Model {
 		changed = true
 	}
 	if changed {
-		m.displayRows, m.txColorMap = m.rebuildDisplayRows()
+		m = m.rebuild()
 		m.cursor = min(m.cursor, max(len(m.displayRows)-1, 0))
 	}
 	return m
