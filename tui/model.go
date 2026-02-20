@@ -214,16 +214,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, runExplain(m.client, msg.mode, msg.query, msg.args)
 
 	case exportResultMsg:
-		m.alertSeq++
+		alertMsg := "wrote: ./" + msg.path
 		if msg.err != nil {
-			m.wroteMessage = "write error: " + msg.err.Error()
-		} else {
-			m.wroteMessage = "wrote: ./" + msg.path
+			alertMsg = "write error: " + msg.err.Error()
 		}
-		seq := m.alertSeq
-		return m, tea.Tick(alertDuration, func(time.Time) tea.Msg {
-			return clearAlertMsg{seq: seq}
-		})
+		m, cmd := m.showAlert(alertMsg)
+		return m, cmd
 
 	case clearAlertMsg:
 		if msg.seq == m.alertSeq {
@@ -266,52 +262,52 @@ func (m Model) View() string {
 		return "Waiting for queries..."
 	}
 
+	var view string
 	switch m.view {
 	case viewInspect:
-		return m.renderInspector()
+		view = m.renderInspector()
 	case viewExplain:
-		return m.renderExplain()
+		view = m.renderExplain()
 	case viewAnalytics:
-		return m.renderAnalytics()
+		view = m.renderAnalytics()
 	case viewList:
+		var footer string
+		switch {
+		case m.searchMode:
+			footer = "  / " + renderInputWithCursor(m.searchQuery, m.searchCursor)
+		case m.filterMode:
+			footer = "  filter: " + renderInputWithCursor(m.filterQuery, m.filterCursor)
+		case m.writeMode:
+			footer = "  write: [j]son [m]arkdown"
+		default:
+			items := []string{
+				"q: quit", "j/k: navigate", "space: toggle tx",
+				"enter: inspect", "a: analytics",
+				"c/C: copy", "x/X: explain",
+				"e/E: edit+explain", "/: search", "f: filter", "s: sort",
+				"w: write",
+			}
+			footer = wrapFooterItems(items, m.width)
+			if m.filterQuery != "" {
+				footer += "\n  " + fmt.Sprintf("[filter: %s]", describeFilter(m.filterQuery))
+			}
+			if m.searchQuery != "" || m.filterQuery != "" {
+				footer += "  esc: clear"
+			}
+			if m.sortMode == sortDuration {
+				footer += "  [sorted: duration]"
+			}
+		}
+
+		footerLines := strings.Count(footer, "\n") + 1
+		listHeight := m.listHeight(footerLines)
+
+		view = strings.Join([]string{
+			m.renderList(listHeight),
+			m.renderPreview(),
+			footer,
+		}, "\n")
 	}
-
-	var footer string
-	switch {
-	case m.searchMode:
-		footer = "  / " + renderInputWithCursor(m.searchQuery, m.searchCursor)
-	case m.filterMode:
-		footer = "  filter: " + renderInputWithCursor(m.filterQuery, m.filterCursor)
-	case m.writeMode:
-		footer = "  write: [j]son [m]arkdown"
-	default:
-		items := []string{
-			"q: quit", "j/k: navigate", "space: toggle tx",
-			"enter: inspect", "a: analytics",
-			"c/C: copy", "x/X: explain",
-			"e/E: edit+explain", "/: search", "f: filter", "s: sort",
-			"w: write",
-		}
-		footer = wrapFooterItems(items, m.width)
-		if m.filterQuery != "" {
-			footer += "\n  " + fmt.Sprintf("[filter: %s]", describeFilter(m.filterQuery))
-		}
-		if m.searchQuery != "" || m.filterQuery != "" {
-			footer += "  esc: clear"
-		}
-		if m.sortMode == sortDuration {
-			footer += "  [sorted: duration]"
-		}
-	}
-
-	footerLines := strings.Count(footer, "\n") + 1
-	listHeight := m.listHeight(footerLines)
-
-	view := strings.Join([]string{
-		m.renderList(listHeight),
-		m.renderPreview(),
-		footer,
-	}, "\n")
 
 	if m.wroteMessage != "" {
 		view = overlayAlert(view, m.wroteMessage, m.width)
@@ -529,7 +525,7 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "e", "E":
 		return m.startEditExplain(explainModeFromKey(msg.String()))
 	case "c", "C":
-		return m.copyQuery(msg.String() == "C"), nil
+		return m.copyQuery(msg.String() == "C")
 	case "/":
 		m.searchMode = true
 		m.searchQuery = ""
@@ -742,17 +738,26 @@ func (m Model) navigateCursor(key string) Model {
 	return m
 }
 
-func (m Model) copyQuery(withArgs bool) Model {
+func (m Model) copyQuery(withArgs bool) (Model, tea.Cmd) {
 	ev := m.cursorEvent()
 	if ev == nil || ev.GetQuery() == "" {
-		return m
+		return m, nil
 	}
 	text := ev.GetQuery()
 	if withArgs {
 		text = query.Bind(text, ev.GetArgs())
 	}
 	_ = clipboard.Copy(context.Background(), text)
-	return m
+	return m.showAlert("copied!")
+}
+
+func (m Model) showAlert(msg string) (Model, tea.Cmd) {
+	m.alertSeq++
+	m.wroteMessage = msg
+	seq := m.alertSeq
+	return m, tea.Tick(alertDuration, func(time.Time) tea.Msg {
+		return clearAlertMsg{seq: seq}
+	})
 }
 
 func (m Model) toggleSort() Model {

@@ -160,6 +160,7 @@ func (m Model) updateAnalytics(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "c":
 		if m.analyticsCursor >= 0 && m.analyticsCursor < len(m.analyticsRows) {
 			_ = clipboard.Copy(context.Background(), m.analyticsRows[m.analyticsCursor].query)
+			return m.showAlert("copied!")
 		}
 		return m, nil
 	}

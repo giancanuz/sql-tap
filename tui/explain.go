@@ -58,7 +58,7 @@ func (m Model) updateExplain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		_ = clipboard.Copy(context.Background(), m.explainPlan)
-		return m, nil
+		return m.showAlert("copied!")
 	case "e", "E":
 		if m.explainQuery == "" {
 			return m, nil
